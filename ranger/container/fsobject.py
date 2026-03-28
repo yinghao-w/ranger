@@ -305,10 +305,16 @@ class FileSystemObject(  # pylint: disable=too-many-instance-attributes,too-many
         else:
             try:
                 new_stat = lstat(path)
-                self.is_link = new_stat.st_mode & 0o170000 == 0o120000
-                if self.is_link:
-                    new_stat = stat(path)
-                self.exists = True
+                # make sure stats refer to same file object in case of
+                # deleting and reusing paths
+                if (not self.stat or (self.stat.st_dev == new_stat.st_dev
+                    and self.stat.st_ino == new_stat.st_ino)):
+                    self.is_link = new_stat.st_mode & 0o170000 == 0o120000
+                    if self.is_link:
+                        new_stat = stat(path)
+                    self.exists = True
+                else:
+                    self.exists = False
             except OSError:
                 self.exists = False
 
@@ -340,7 +346,9 @@ class FileSystemObject(  # pylint: disable=too-many-instance-attributes,too-many
         if self.is_link and not self.is_directory:
             self.infostring = '->' + self.infostring
 
-        self.stat = new_stat
+        if new_stat:
+            self.stat = new_stat
+
         self.last_load_time = time()
 
     def get_permission_string(self):
